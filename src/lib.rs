@@ -1,7 +1,30 @@
 extern crate openssl;
 pub use openssl::{pkey::{PKey,Private},rsa::Rsa,error::ErrorStack,bn::{BigNumContext,BigNum,BigNumRef}};
-extern crate base64;
 pub struct WorkSpace(BigNumContext);
+pub fn decode(s:&str)->Vec<u8>{
+  let mut ret=Vec::with_capacity((s.len()+1)*3/4);
+  let c:u16=0;
+  let mut iter=s.as_bytes().chunks_exact(4);
+  let v=|x:u8,shl:i8|->u32 {(match x{
+    b'A'..=b'Z'=>(x-b'A'),
+    b'a'..=b'z'=>(x-b'G'),//(x-b'a'+26)//(x-b'a'+b'Z'-b'A'+1) as u32
+    b'0'..=b'9'=>x+4,
+    b'+'|b'-'=>62,
+    b'/'|b'_'=>63,
+    _=>0
+  } as u32) << shl};
+  let x=iter.remainder();
+  iter.for_each(|x|{let c=v(x[0],18)|v(x[1],12)|v(x[2],6)|v(x[3],0);ret.extend([(c>>16) as u8,(c>>8) as u8,c as u8])});
+  let c=v(*x.get(0).unwrap_or(&0),24)|v(*x.get(1).unwrap_or(&0),16)|v(*x.get(2).unwrap_or(&0),8)|v(*x.get(3).unwrap_or(&0),0);
+  match x.len(){
+    4=>ret.extend([(c>>16) as u8,(c>>8) as u8,c as u8]),
+    3=>ret.extend([(c>>16) as u8,(c>>8) as u8]),
+    1..=2=>ret.push((c>>24) as u8),
+    _=>(),
+  }
+  *ret.last_mut().unwrap()|=1;
+  ret
+}
 impl WorkSpace{
     /// create a new instance, may panic.
     pub fn new()->Self {
@@ -31,17 +54,13 @@ impl WorkSpace{
     /// `n_suffix_div_2` is used to rearrange the output to ensure the willing beautiful chars would occur, rather than encoded by base64 in another way.
     /// it is good to keep n_suffix less than 4294967296, otherwise an overflow would occur thus the program may perform something you don't like.
     /// if you want to change suffix larger than 4 bytes, you could modify the `beautiful` string directly.
-    pub fn generate_beautiful_private_key(&mut self, beautiful:&str, bits:i32, n_suffix_div_2:u32,safe_first:bool,safe_second:bool)->Result<Rsa<Private>,ErrorStack>{
-        let vec=base64::decode(beautiful).unwrap();
-        let end=n_suffix_div_2*2+1;
-        let suffix_shl= ( 1 + (end > 256) as i32+(end > 65536) as i32 +(end > 16777216) as i32 ) * 8;
+    pub fn generate_beautiful_private_key(&mut self, beautiful:&str, bits:i32, safe_first:bool,safe_second:bool)->Result<Rsa<Private>,ErrorStack>{
+        let vec=decode(beautiful);
         let one=BigNum::from_u32(1)?;
 
-        let bitlevel=&one << (suffix_shl+8*vec.len() as i32);
+        let bitlevel=&one << (8*vec.len() as i32);
         let mut suffix=BigNum::from_u32(0)?;
         vec.into_iter().for_each(|x|{suffix=&suffix<<8;suffix.add_word(x as u32).unwrap()});
-        suffix=&suffix<<suffix_shl;
-        suffix.add_word(end)?;
 
         let mut pinv=BigNum::new()?;
         let mut rem=BigNum::new()?;
@@ -78,7 +97,7 @@ mod tests {
     #[test]
     fn it_works()->Result<(),ErrorStack> {
         println!("stage 0 finished.");
-        crate::WorkSpace::new().generate_beautiful_private_key("ABeaAAAA",1024,1,true,false)?;
+        crate::WorkSpace::new().generate_beautiful_private_key("ABeaAAAAAA",1024,true,false)?;
         assert_eq!(2 + 2, 4);
         Ok(())
     }
