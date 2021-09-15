@@ -1,0 +1,15 @@
+[package]
+name = "beautiful-rsa-certs"
+version = "0.1.0"
+edition = "2021"
+# rustc : 1.57.0
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+openssl = "*" # 0.10.36 should work
+base64 = "*" # 0.13.0 should work
+# rsa = "*"
+# gmp-mpfr-sys = "*" # 1.4.6 should work
+# pkcs8 = { version = "*", features = ["alloc", "pem"]  } # 0.7.6 should work
+
