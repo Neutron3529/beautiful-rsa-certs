@@ -3,8 +3,7 @@ pub use openssl::{pkey::{PKey,Private},rsa::Rsa,error::ErrorStack,bn::{BigNumCon
 pub struct WorkSpace(BigNumContext);
 pub fn decode(s:&str)->Vec<u8>{
   let mut ret=Vec::with_capacity((s.len()+1)*3/4);
-  let c:u16=0;
-  let mut iter=s.as_bytes().chunks_exact(4);
+  let iter=s.as_bytes().chunks_exact(4);
   let v=|x:u8,shl:i8|->u32 {(match x{
     b'A'..=b'Z'=>(x-b'A'),
     b'a'..=b'z'=>(x-b'G'),//(x-b'a'+26)//(x-b'a'+b'Z'-b'A'+1) as u32
@@ -68,6 +67,14 @@ impl WorkSpace{
         pinv.mod_inverse(&p,&bitlevel,&mut self.0)?;
         rem.mod_mul(&pinv,&suffix,&bitlevel,&mut self.0)?;
         let q=Self::get_prime(bits,safe_second,Some(&bitlevel),Some(&rem))?;
+        self.private_key_from_p_q(&p.to_dec_str()?,&q.to_dec_str()?)
+    }
+
+    /// generate private key from exist p and q, do not check if one of them is prime or not.
+    pub fn private_key_from_p_q(&mut self, p:&str,q:&str)->Result<Rsa<Private>,ErrorStack>{
+        let p=BigNum::from_dec_str(p)?;
+        let q=BigNum::from_dec_str(q)?;
+        let one=BigNum::from_u32(1)?;
         let mut phi=BigNum::new()?;
         let n=&p*&q;
         let pm1=&p-&one;
@@ -84,6 +91,8 @@ impl WorkSpace{
         iqmp.mod_inverse(&q,&p,&mut self.0)?;
         Rsa::from_private_components(n,e,d,p,q,dmp1,dmq1,iqmp)
     }
+
+    /// show pem of public key and private key.
     pub fn show_pem(p:Rsa<Private>)->Result<String,ErrorStack>{
         let pkey = PKey::from_rsa(p)?;
         let pub_key: Vec<u8> = pkey.public_key_to_pem()?;
@@ -96,9 +105,7 @@ mod tests {
     use crate::ErrorStack;
     #[test]
     fn it_works()->Result<(),ErrorStack> {
-        println!("stage 0 finished.");
         crate::WorkSpace::new().generate_beautiful_private_key("ABeaAAAAAA",1024,true,false)?;
-        assert_eq!(2 + 2, 4);
         Ok(())
     }
 }
